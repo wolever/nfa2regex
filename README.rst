@@ -32,7 +32,7 @@ Which produces the state diagram:
 
 And the regular expression::
 
-    *bc*d(e|xa*bc*d)*
+    a*bc*d(e|xa*bc*d)*
 
 
 Binary Multiples of 3
