@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -36,6 +39,19 @@ func (nfa *NFA) addEdge(srcName NFANodeName, dstName NFANodeName, value NFAEdgeV
 		dstNode: dstNode,
 		value:   value,
 	})
+}
+
+func (nfa *NFA) replaceNode(name NFANodeName, newNode *NFANode) {
+	oldNode := nfa.nodes[name]
+	nfa.nodes[name] = newNode
+	for _, edge := range nfa.edges {
+		if edge.srcNode == oldNode {
+			edge.srcNode = newNode
+		}
+		if edge.dstNode == oldNode {
+			edge.dstNode = newNode
+		}
+	}
 }
 
 // Removes a node an all associated edges from the NFA.
@@ -111,9 +127,43 @@ func New() *NFA {
 	}
 }
 
+var _svgTempDir string
+var _svgCounter int
+var DEBUG_SHOW_STEPS = false
+
+// Generates an SVG for ``nfa`` and saves it to a temp directory
+func debugShowStep(nfa *NFA, description string) {
+	if !DEBUG_SHOW_STEPS {
+		return
+	}
+
+	if len(_svgTempDir) == 0 {
+		tempDir, err := ioutil.TempDir("", "nfa-to-regex-svgs")
+		if err != nil {
+			panic(err)
+		}
+		_svgTempDir = tempDir
+		fmt.Println("Saving debug steps to:", _svgTempDir)
+	}
+
+	dot := NFA2Dot(nfa)
+
+	_svgCounter += 1
+	fname := fmt.Sprintf("nfa-%02d-%s.svg", _svgCounter, description)
+	dotProc := exec.Command("dot", "-Tsvg", "-o", path.Join(_svgTempDir, fname))
+	dotProc.Stdin = strings.NewReader(dot)
+
+	err := dotProc.Run()
+	if err != nil {
+		panic(err)
+	}
+}
+
 // Converts a NFA to a regular expression using the state removal technique
 func NFA2Regex(nfa *NFA) string {
 	nfa = nfa.shallowCopy()
+
+	debugShowStep(nfa, "start")
 
 	// 1. Create single initial and terminal nodes with empty transitions to
 	initialNode := nfa._getOrCreateNode("__initial__")
@@ -121,11 +171,25 @@ func NFA2Regex(nfa *NFA) string {
 	for _, node := range nfa.nodes {
 		if node.isInitial {
 			nfa.addEdge(initialNode.name, node.name, "")
+			nfa.replaceNode(node.name, &NFANode{
+				name:       node.name,
+				isInitial:  false,
+				isTerminal: false,
+			})
 		}
 		if node.isTerminal {
 			nfa.addEdge(node.name, terminalNode.name, "")
+			nfa.replaceNode(node.name, &NFANode{
+				name:       node.name,
+				isInitial:  false,
+				isTerminal: false,
+			})
 		}
 	}
+	initialNode.isInitial = true
+	terminalNode.isTerminal = true
+
+	debugShowStep(nfa, "create-initial-terminal")
 
 	// 2. Iteritively remove nodes which aren't the initial or terminal node
 	for len(nfa.nodes) > 2 {
@@ -163,6 +227,7 @@ func NFA2Regex(nfa *NFA) string {
 			}
 
 			nfa.removeNode(node.name)
+			debugShowStep(nfa, fmt.Sprintf("remove-node-%s", node.name))
 		}
 	}
 
@@ -181,11 +246,15 @@ func NFA2Dot(nfa *NFA) string {
 	res = append(res, "\trankdir = LR;")
 
 	for _, edge := range nfa.edges {
+		label := edge.value
+		if len(label) == 0 {
+			label = "''"
+		}
 		res = append(res, fmt.Sprintf(
 			"\t%q -> %q [label=%q];",
 			edge.srcNode.name,
 			edge.dstNode.name,
-			edge.value,
+			label,
 		))
 	}
 
@@ -195,7 +264,7 @@ func NFA2Dot(nfa *NFA) string {
 			res = append(res, fmt.Sprintf("\t%q -> %q;", node.name+"__initial", node.name))
 		}
 		if node.isTerminal {
-			res = append(res, fmt.Sprintf("\t%q [shape=doublecircle];", node.name))
+			res = append(res, fmt.Sprintf("\t%q [peripheries=2];", node.name))
 		}
 
 	}
@@ -227,20 +296,21 @@ func addKleenStar(s string, noWrap ...bool) string {
 //   orJoin({"a"}) -> "a"
 //   orJoin({"a", "b"}) -> "(a|b)"
 //   orJoin({"", "a", "b"}) -> "(a|b)"
-func orJoin(strs []string) string {
+func orJoin(inputStrs []string) string {
+	strs := make([]string, 0, len(inputStrs))
+	for _, s := range inputStrs {
+		if len(s) > 0 {
+			strs = append(strs, s)
+		}
+	}
+
 	switch len(strs) {
 	case 0:
 		return ""
 	case 1:
 		return strs[0]
 	default:
-		res := ""
-		for _, str := range strs {
-			if len(str) > 0 {
-				res += str + "|"
-			}
-		}
-		return "(" + res[:len(res)-1] + ")"
+		return "(" + strings.Join(strs, "|") + ")"
 	}
 }
 
@@ -260,7 +330,7 @@ func MakeNFAMultiplesOfN(n int) *NFA {
 }
 
 // Generates an example NFA
-func MakeNFAExample() *NFA {
+func MakeNFASimple() *NFA {
 	nfa := New()
 	nfa.addEdge("1", "1", "a")
 	nfa.addEdge("1", "2", "b")
@@ -273,11 +343,29 @@ func MakeNFAExample() *NFA {
 	return nfa
 }
 
+// Generates an NFA with multiple initial and terminal nodes
+func MakeNFAManyMany() *NFA {
+	nfa := New()
+	nfa.addEdge("1", "2", "a")
+	nfa.addEdge("2", "3", "b")
+	nfa.addEdge("2", "2", "l")
+	nfa.addEdge("4", "2", "x")
+	nfa.addEdge("2", "5", "y")
+	nfa.nodes["1"].isInitial = true
+	nfa.nodes["4"].isInitial = true
+	nfa.nodes["3"].isTerminal = true
+	nfa.nodes["5"].isTerminal = true
+	return nfa
+}
+
 func main() {
-	nfa := MakeNFAMultiplesOfN(3)
+	DEBUG_SHOW_STEPS = true
+	nfa := MakeNFAManyMany()
+	//nfa := MakeNFAMultiplesOfN(3)
+	regex := NFA2Regex(nfa)
 	fmt.Println("Graph:")
 	fmt.Println("https://dreampuf.github.io/GraphvizOnline/#" + url.PathEscape(NFA2Dot(nfa)))
 	fmt.Println()
 	fmt.Println("Regex:")
-	fmt.Println(NFA2Regex(nfa))
+	fmt.Println(regex)
 }
