@@ -1,3 +1,3 @@
-module wolever/nfa-to-regex
+module github.com/wolever/nfa2regex
 
 go 1.17

@@ -1,4 +1,4 @@
-``nfa-to-regex``: convert NFAs (and DFAs) to regular expressions
+``nfa2regex``: convert NFAs (and DFAs) to regular expressions
 ================================================================
 
 An implementation of the state removal technique for converting an NFA to a
