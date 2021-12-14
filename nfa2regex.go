@@ -2,7 +2,8 @@ package nfa2regex
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 	"os/exec"
 	"path"
 	"strings"
@@ -137,51 +138,36 @@ func (nfa *NFA) ShallowCopy() *NFA {
 	return res
 }
 
-// New creates a new NFA.
-func New() *NFA {
+// NewNFA creates a new NFA.
+func NewNFA() *NFA {
 	return &NFA{
 		Nodes: map[nfaNodeName]*NFANode{},
 		Edges: []*NFAEdge{},
 	}
 }
 
-var _svgTempDir string
-var _svgCounter int
-var DEBUG_SHOW_STEPS = false
-
-// Generates an SVG for ``nfa`` and saves it to a temp directory
-func debugShowStep(nfa *NFA, description string) {
-	if !DEBUG_SHOW_STEPS {
-		return
-	}
-
-	if len(_svgTempDir) == 0 {
-		tempDir, err := ioutil.TempDir("", "nfa-to-regex-svgs")
-		if err != nil {
-			panic(err)
-		}
-		_svgTempDir = tempDir
-		fmt.Println("Saving debug steps to:", _svgTempDir)
-	}
-
-	dot := NFA2Dot(nfa)
-
-	_svgCounter += 1
-	fname := fmt.Sprintf("nfa-%02d-%s.svg", _svgCounter, description)
-	dotProc := exec.Command("dot", "-Tsvg", "-o", path.Join(_svgTempDir, fname))
-	dotProc.Stdin = strings.NewReader(dot)
-
-	err := dotProc.Run()
-	if err != nil {
-		panic(err)
-	}
+// NFA2RegexConfig defines the configuration options available to NFA2Regex,
+// useable through the NFA2RegexWithConfig function.
+type NFA2RegexConfig struct {
+	StepCallback func(nfa *NFA, stepName string)
 }
 
-// Converts a NFA to a regular expression using the state removal technique
+// NFA2Regex converts an NFA to a regular expression using the state removal
+// method (see also: NFA2RegexWithConfig).
 func NFA2Regex(nfa *NFA) string {
+	return NFA2RegexWithConfig(nfa, NFA2RegexConfig{})
+}
+
+// NFA2Regex converts an NFA to a regular expression using the state removal
+// method, with configuration parameters defined by NFA2RegexConfig.
+func NFA2RegexWithConfig(nfa *NFA, config NFA2RegexConfig) string {
+	if config.StepCallback == nil {
+		config.StepCallback = func(nfa *NFA, stepName string) {}
+	}
+
 	nfa = nfa.ShallowCopy()
 
-	debugShowStep(nfa, "start")
+	config.StepCallback(nfa, "start")
 
 	// 1. Create single initial and terminal nodes with empty transitions to
 	initialNode := nfa.GetOrCreateNode("__initial__")
@@ -207,7 +193,7 @@ func NFA2Regex(nfa *NFA) string {
 	initialNode.IsInitial = true
 	terminalNode.IsTerminal = true
 
-	debugShowStep(nfa, "create-initial-terminal")
+	config.StepCallback(nfa, "create-initial-terminal")
 
 	// 2. Iteritively remove nodes which aren't the initial or terminal node
 	for len(nfa.Nodes) > 2 {
@@ -245,7 +231,7 @@ func NFA2Regex(nfa *NFA) string {
 			}
 
 			nfa.RemoveNode(node.Name)
-			debugShowStep(nfa, fmt.Sprintf("remove-node-%s", node.Name))
+			config.StepCallback(nfa, fmt.Sprintf("remove-node-%s", node.Name))
 		}
 	}
 
@@ -257,7 +243,35 @@ func NFA2Regex(nfa *NFA) string {
 	return orJoin(res)
 }
 
-// Generates a graphviz dot file from a NFA
+// StepCallbackWriteSVGs is a convenience method returning a
+// NFA2RegexConfig.StepConfig function that will create an SVG for each step in
+// `basedir`:
+//   NFA2RegexWithConfig(nfa, NFA2RegexConfig{
+//     StepCallback: StepCallbackWriteSVGs("/tmp/"),
+//   })
+// Note: no error handling is done. StepCallbackWriteSVGs will panic() on any
+// error.
+func StepCallbackWriteSVGs(basedir string) func(nfa *NFA, stepName string) {
+	svgCounter := 0
+
+	return func(nfa *NFA, stepName string) {
+		svgCounter += 1
+
+		fname := fmt.Sprintf("%02d-%s.svg", svgCounter, stepName)
+		f, err := os.Create(path.Join(basedir, fname))
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		err = Nfa2SVG(nfa, f)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+// NFA2Dot generates a graphviz dot file from a NFA.
 func NFA2Dot(nfa *NFA) string {
 	res := make([]string, 0, len(nfa.Edges)+5)
 
@@ -288,6 +302,16 @@ func NFA2Dot(nfa *NFA) string {
 	}
 
 	return "digraph g {\n" + strings.Join(res, "\n") + "\n}\n"
+}
+
+// Nfa2SVG uses graphvis' `dot` command to generate an SVG from `nfa`, returning
+// `nil` or `error`.
+func Nfa2SVG(nfa *NFA, output io.Writer) error {
+	dot := NFA2Dot(nfa)
+	dotProc := exec.Command("dot", "-Tsvg")
+	dotProc.Stdin = strings.NewReader(dot)
+	dotProc.Stdout = output
+	return dotProc.Run()
 }
 
 // addKleenStar a kleen star to ``s``:

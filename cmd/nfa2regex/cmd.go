@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"strconv"
 
@@ -10,7 +11,7 @@ import (
 
 // MakeNFASimple generates a simple example NFA
 func MakeNFASimple() *n.NFA {
-	nfa := n.New()
+	nfa := n.NewNFA()
 	nfa.AddEdge("1", "1", "a")
 	nfa.AddEdge("1", "2", "b")
 	nfa.AddEdge("2", "2", "c")
@@ -24,7 +25,7 @@ func MakeNFASimple() *n.NFA {
 
 // MakeNFAManyMany genreates an NFA with multiple initial and terminal nodes
 func MakeNFAManyMany() *n.NFA {
-	nfa := n.New()
+	nfa := n.NewNFA()
 	nfa.AddEdge("1", "2", "a")
 	nfa.AddEdge("2", "3", "b")
 	nfa.AddEdge("2", "2", "l")
@@ -41,7 +42,7 @@ func MakeNFAManyMany() *n.NFA {
 // are multiples of ``x``
 func MakeNFAMultiplesOfX(x int) *n.NFA {
 	str := func(i int) string { return strconv.Itoa((i)) }
-	nfa := n.New()
+	nfa := n.NewNFA()
 	for i := 0; i < x; i += 1 {
 		nfa.AddEdge(str(i), str((i*2)%x), "0")
 		nfa.AddEdge(str(i), str((i*2+1)%x), "1")
@@ -56,7 +57,16 @@ func MakeNFAMultiplesOfX(x int) *n.NFA {
 func main() {
 	nfa := MakeNFAManyMany()
 	//nfa := MakeNFAMultiplesOfN(3)
-	regex := n.NFA2Regex(nfa)
+
+	tempDir, err := ioutil.TempDir("", "nfa-to-regex-svgs-")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Saving converstion steps to:", tempDir)
+
+	regex := n.NFA2RegexWithConfig(nfa, n.NFA2RegexConfig{
+		StepCallback: n.StepCallbackWriteSVGs(tempDir),
+	})
 	fmt.Println("Graph:")
 	fmt.Println("https://dreampuf.github.io/GraphvizOnline/#" + url.PathEscape(n.NFA2Dot(nfa)))
 	fmt.Println()

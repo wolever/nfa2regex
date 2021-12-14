@@ -1,5 +1,5 @@
 ``nfa2regex``: convert NFAs (and DFAs) to regular expressions
-================================================================
+=============================================================
 
 An implementation of the state removal technique for converting an NFA to a
 regular expression.
@@ -16,15 +16,15 @@ A simple example NFA:
 
 .. code:: golang
 
-    nfa := New()
-    nfa.addEdge("1", "1", "a")
-    nfa.addEdge("1", "2", "b")
-    nfa.addEdge("2", "2", "c")
-    nfa.addEdge("2", "3", "d")
-    nfa.addEdge("3", "3", "e")
-    nfa.addEdge("3", "1", "x")
-    nfa.nodes["1"].isInitial = true
-    nfa.nodes["3"].isTerminal = true
+    nfa := nfa2regex.NewNFA()
+    nfa.AddEdge("1", "1", "a")
+    nfa.AddEdge("1", "2", "b")
+    nfa.AddEdge("2", "2", "c")
+    nfa.AddEdge("2", "3", "d")
+    nfa.AddEdge("3", "3", "e")
+    nfa.AddEdge("3", "1", "x")
+    nfa.Nodes["1"].IsInitial = true
+    nfa.Nodes["3"].IsTerminal = true
 
 Which produces the state diagram:
 
@@ -42,12 +42,12 @@ An NFA which matches multiples of 3:
 
 .. code:: golang
 
-    func MakeNFAMultiplesOfN(n int) *NFA {
+    func MakeNFAMultiplesOfX(x int) *NFA {
         str := func(i int) string { return strconv.Itoa((i)) }
         nfa := New()
-        for i := 0; i < n; i += 1 {
-            nfa.addEdge(str(i), str((i*2)%n), "0")
-            nfa.addEdge(str(i), str((i*2+1)%n), "1")
+        for i := 0; i < x; i += 1 {
+            nfa.addEdge(str(i), str((i*2)%x), "0")
+            nfa.addEdge(str(i), str((i*2+1)%x), "1")
         }
         nfa.addEdge("start", "0", "0")
         nfa.addEdge("start", "1", "1")
