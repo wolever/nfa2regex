@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,16 @@ func MakeNFAManyMany() *NFA {
 	nfa.Nodes["4"].IsInitial = true
 	nfa.Nodes["3"].IsTerminal = true
 	nfa.Nodes["5"].IsTerminal = true
+	return nfa
+}
+
+func MakeSimpleNFA() *NFA {
+	nfa := NewNFA()
+	nfa.AddEdge("1", "2", "a")
+	nfa.AddEdge("2", "2", "x")
+	nfa.AddEdge("2", "3", "b")
+	nfa.Nodes["1"].IsInitial = true
+	nfa.Nodes["3"].IsTerminal = true
 	return nfa
 }
 
@@ -127,12 +138,7 @@ func TestToRegexStepCallbackError(t *testing.T) {
 }
 
 func ExampleToRegex() {
-	nfa := NewNFA()
-	nfa.AddEdge("1", "2", "a")
-	nfa.AddEdge("2", "2", "x")
-	nfa.AddEdge("2", "3", "b")
-	nfa.Nodes["1"].IsInitial = true
-	nfa.Nodes["3"].IsTerminal = true
+	nfa := MakeSimpleNFA()
 	fmt.Println(ToRegex(nfa))
 	// Output: ax*b
 }
@@ -163,4 +169,26 @@ func ExampleToRegex_noPathBetweenInitialAndTerminal() {
 	_, err := ToRegex(nfa)
 	fmt.Println(err)
 	// Output: NFA has no path between initial and terminal node(s)
+}
+
+func TestToASCIINoError(t *testing.T) {
+	nfa := MakeSimpleNFA()
+	output := new(strings.Builder)
+	err := ToASCII(nfa, output)
+	assert.NoError(t, err)
+}
+
+func ExampleToASCII() {
+	nfa := MakeSimpleNFA()
+	output := new(strings.Builder)
+	ToASCII(nfa, output)
+	fmt.Println("NFA in ASCII:")
+	fmt.Print(output.String())
+	// Output: NFA in ASCII:
+	//                          x
+	//                        +---+
+	//                        v   |
+	//           +---+  a   +-------+  b   #===#
+	//   *   --> | 1 | ---> |   2   | ---> H 3 H
+	//           +---+      +-------+      #===#
 }

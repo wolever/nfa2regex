@@ -378,6 +378,17 @@ func ToSVG(nfa *NFA, output io.Writer) error {
 	return dotProc.Run()
 }
 
+// ToASCII uses `graph-easy` to convert the NFA to an ASCII-art graph.
+// Note: for `graph-easy` install instructions, see:
+// https://stackoverflow.com/a/55403011/71522
+func ToASCII(nfa *NFA, output io.Writer) error {
+	dot := ToDot(nfa)
+	proc := exec.Command("graph-easy")
+	proc.Stdin = strings.NewReader(dot)
+	proc.Stdout = output
+	return proc.Run()
+}
+
 // addKleenStar a kleen star to ``s``:
 //   addKleenStar("") -> ""
 //   addKleenStar("a") -> "a*"
