@@ -138,6 +138,38 @@ func (nfa *NFA) ShallowCopy() *NFA {
 	return res
 }
 
+// Match determins whether `nfa`` accepts `input`
+func (nfa *NFA) Match(input string) bool {
+	activeNodes := [](*NFANode){}
+	for _, node := range nfa.Nodes {
+		if node.IsInitial {
+			activeNodes = append(activeNodes, node)
+		}
+	}
+
+	for _, chRune := range input {
+		ch := string(chRune)
+		newActiveNodes := [](*NFANode){}
+		for _, activeNode := range activeNodes {
+			for _, outEdge := range nfa.EdgesOut(activeNode.Name) {
+				if outEdge.Value == ch {
+					newActiveNodes = append(newActiveNodes, outEdge.DstNode)
+				}
+			}
+		}
+
+		activeNodes = newActiveNodes
+	}
+
+	for _, node := range activeNodes {
+		if node.IsTerminal {
+			return true
+		}
+	}
+
+	return false
+}
+
 // NewNFA creates a new NFA.
 func NewNFA() *NFA {
 	return &NFA{
