@@ -1,6 +1,7 @@
 package nfa2regex
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -103,7 +104,7 @@ func TestNFAWalk(t *testing.T) {
 
 func TestGeneratedRegex(t *testing.T) {
 	nfa := MakeNFAManyMany()
-	regexStr := ToRegex(nfa)
+	regexStr, _ := ToRegex(nfa)
 	regex := regexp.MustCompile(regexStr)
 
 	nfaWalk(nfa, 6, func(path string, node *NFANode) {
@@ -112,4 +113,54 @@ func TestGeneratedRegex(t *testing.T) {
 			assert.Equal(t, node.IsTerminal, isMatch)
 		})
 	})
+}
+
+func TestToRegexStepCallbackError(t *testing.T) {
+	nfa := MakeNFAManyMany()
+	_, err := ToRegexWithConfig(nfa, ToRegexConfig{
+		StepCallback: func(nfa *NFA, stepName string) error {
+			return errors.New("test error")
+		},
+	})
+
+	assert.Equal(t, "StepCallback for \"start\" returned error: test error", fmt.Sprint(err))
+}
+
+func ExampleToRegex() {
+	nfa := NewNFA()
+	nfa.AddEdge("1", "2", "a")
+	nfa.AddEdge("2", "2", "x")
+	nfa.AddEdge("2", "3", "b")
+	nfa.Nodes["1"].IsInitial = true
+	nfa.Nodes["3"].IsTerminal = true
+	fmt.Println(ToRegex(nfa))
+	// Output: ax*b
+}
+
+func ExampleToRegex_noInitialNode() {
+	nfa := NewNFA()
+	nfa.AddEdge("1", "2", "a")
+	_, err := ToRegex(nfa)
+	fmt.Println(err)
+	// Output: NFA has no initial node(s)
+}
+
+func ExampleToRegex_noTerminalNode() {
+	nfa := NewNFA()
+	nfa.AddEdge("1", "2", "a")
+	nfa.Nodes["1"].IsInitial = true
+	_, err := ToRegex(nfa)
+	fmt.Println(err)
+	// Output: NFA has no terminal node(s)
+}
+
+func ExampleToRegex_noPathBetweenInitialAndTerminal() {
+	nfa := NewNFA()
+	nfa.AddEdge("1", "1", "a")
+	nfa.AddEdge("2", "2", "b")
+	nfa.Nodes["1"].IsInitial = true
+	nfa.Nodes["2"].IsTerminal = true
+	_, err := ToRegex(nfa)
+	fmt.Println(err)
+	// Output: NFA has no path between initial and terminal node(s)
 }

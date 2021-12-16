@@ -1,6 +1,7 @@
 package nfa2regex
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -181,31 +182,41 @@ func NewNFA() *NFA {
 // ToRegexConfig defines the configuration options available to NFA2Regex,
 // useable through the NFA2RegexWithConfig function.
 type ToRegexConfig struct {
-	StepCallback func(nfa *NFA, stepName string)
+	StepCallback func(nfa *NFA, stepName string) error
 }
 
 // ToRegex converts an NFA to a regular expression using the state removal
 // method (see also: NFA2RegexWithConfig).
-func ToRegex(nfa *NFA) string {
+func ToRegex(nfa *NFA) (string, error) {
 	return ToRegexWithConfig(nfa, ToRegexConfig{})
 }
 
 // NFA2Regex converts an NFA to a regular expression using the state removal
 // method, with configuration parameters defined by NFA2RegexConfig.
-func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) string {
+func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) (string, error) {
 	if config.StepCallback == nil {
-		config.StepCallback = func(nfa *NFA, stepName string) {}
+		config.StepCallback = func(nfa *NFA, stepName string) error { return nil }
+	}
+
+	if nfa == nil {
+		return "", errors.New("NFA must be non-nil")
 	}
 
 	nfa = nfa.ShallowCopy()
 
-	config.StepCallback(nfa, "start")
+	err := config.StepCallback(nfa, "start")
+	if err != nil {
+		return "", fmt.Errorf("StepCallback for %q returned error: %w", "start", err)
+	}
 
 	// 1. Create single initial and terminal nodes with empty transitions to
 	initialNode := nfa.GetOrCreateNode("__initial__")
 	terminalNode := nfa.GetOrCreateNode("__terminal__")
+	nfaHasInitial := false
+	nfaHasTerminal := false
 	for _, node := range nfa.Nodes {
 		if node.IsInitial {
+			nfaHasInitial = true
 			nfa.AddEdge(initialNode.Name, node.Name, "")
 			nfa.ReplaceNode(node.Name, &NFANode{
 				Name:       node.Name,
@@ -214,6 +225,7 @@ func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) string {
 			})
 		}
 		if node.IsTerminal {
+			nfaHasTerminal = true
 			nfa.AddEdge(node.Name, terminalNode.Name, "")
 			nfa.ReplaceNode(node.Name, &NFANode{
 				Name:       node.Name,
@@ -225,7 +237,18 @@ func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) string {
 	initialNode.IsInitial = true
 	terminalNode.IsTerminal = true
 
-	config.StepCallback(nfa, "create-initial-terminal")
+	if !nfaHasInitial {
+		return "", errors.New("NFA has no initial node(s)")
+	}
+
+	if !nfaHasTerminal {
+		return "", errors.New("NFA has no terminal node(s)")
+	}
+
+	err = config.StepCallback(nfa, "create-initial-terminal")
+	if err != nil {
+		return "", fmt.Errorf("StepCallback for %q returned error: %w", "create-initial-terminal", err)
+	}
 
 	// 2. Iteritively remove nodes which aren't the initial or terminal node
 	for len(nfa.Nodes) > 2 {
@@ -263,16 +286,28 @@ func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) string {
 			}
 
 			nfa.RemoveNode(node.Name)
-			config.StepCallback(nfa, fmt.Sprintf("remove-node-%s", node.Name))
+
+			stepName := fmt.Sprintf("remove-node-%s", node.Name)
+			err = config.StepCallback(nfa, stepName)
+			if err != nil {
+				return "", fmt.Errorf("StepCallback for %q returned error: %w", stepName, err)
+			}
 		}
 	}
 
 	// 3. Produce the regular expression
+	hasInitialTerminalEdge := false
 	res := make([]string, 0, len(nfa.Edges))
 	for _, edge := range nfa.Edges {
+		if edge.SrcNode.IsInitial && edge.DstNode.IsTerminal {
+			hasInitialTerminalEdge = true
+		}
 		res = append(res, edge.Value)
 	}
-	return orJoin(res)
+	if !hasInitialTerminalEdge {
+		return "", errors.New("NFA has no path between initial and terminal node(s)")
+	}
+	return orJoin(res), nil
 }
 
 // StepCallbackWriteSVGs is a convenience method returning a
@@ -283,10 +318,10 @@ func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) string {
 //   })
 // Note: no error handling is done. StepCallbackWriteSVGs will panic() on any
 // error.
-func StepCallbackWriteSVGs(basedir string) func(nfa *NFA, stepName string) {
+func StepCallbackWriteSVGs(basedir string) func(nfa *NFA, stepName string) error {
 	svgCounter := 0
 
-	return func(nfa *NFA, stepName string) {
+	return func(nfa *NFA, stepName string) error {
 		svgCounter += 1
 
 		fname := fmt.Sprintf("%02d-%s.svg", svgCounter, stepName)
@@ -296,10 +331,7 @@ func StepCallbackWriteSVGs(basedir string) func(nfa *NFA, stepName string) {
 		}
 		defer f.Close()
 
-		err = ToSVG(nfa, f)
-		if err != nil {
-			panic(err)
-		}
+		return ToSVG(nfa, f)
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/url"
 	"strconv"
 
@@ -64,9 +65,12 @@ func main() {
 	}
 	fmt.Println("Saving converstion steps to:", tempDir)
 
-	regex := n.ToRegexWithConfig(nfa, n.ToRegexConfig{
+	regex, err := n.ToRegexWithConfig(nfa, n.ToRegexConfig{
 		StepCallback: n.StepCallbackWriteSVGs(tempDir),
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	fmt.Println("Graph:")
 	fmt.Println("https://dreampuf.github.io/GraphvizOnline/#" + url.PathEscape(n.ToDot(nfa)))
 	fmt.Println()
