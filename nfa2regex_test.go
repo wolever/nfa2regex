@@ -103,7 +103,7 @@ func TestNFAWalk(t *testing.T) {
 
 func TestGeneratedRegex(t *testing.T) {
 	nfa := MakeNFAManyMany()
-	regexStr := NFA2Regex(nfa)
+	regexStr := ToRegex(nfa)
 	regex := regexp.MustCompile(regexStr)
 
 	nfaWalk(nfa, 6, func(path string, node *NFANode) {

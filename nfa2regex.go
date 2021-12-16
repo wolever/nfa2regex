@@ -178,21 +178,21 @@ func NewNFA() *NFA {
 	}
 }
 
-// NFA2RegexConfig defines the configuration options available to NFA2Regex,
+// ToRegexConfig defines the configuration options available to NFA2Regex,
 // useable through the NFA2RegexWithConfig function.
-type NFA2RegexConfig struct {
+type ToRegexConfig struct {
 	StepCallback func(nfa *NFA, stepName string)
 }
 
-// NFA2Regex converts an NFA to a regular expression using the state removal
+// ToRegex converts an NFA to a regular expression using the state removal
 // method (see also: NFA2RegexWithConfig).
-func NFA2Regex(nfa *NFA) string {
-	return NFA2RegexWithConfig(nfa, NFA2RegexConfig{})
+func ToRegex(nfa *NFA) string {
+	return ToRegexWithConfig(nfa, ToRegexConfig{})
 }
 
 // NFA2Regex converts an NFA to a regular expression using the state removal
 // method, with configuration parameters defined by NFA2RegexConfig.
-func NFA2RegexWithConfig(nfa *NFA, config NFA2RegexConfig) string {
+func ToRegexWithConfig(nfa *NFA, config ToRegexConfig) string {
 	if config.StepCallback == nil {
 		config.StepCallback = func(nfa *NFA, stepName string) {}
 	}
@@ -296,15 +296,15 @@ func StepCallbackWriteSVGs(basedir string) func(nfa *NFA, stepName string) {
 		}
 		defer f.Close()
 
-		err = Nfa2SVG(nfa, f)
+		err = ToSVG(nfa, f)
 		if err != nil {
 			panic(err)
 		}
 	}
 }
 
-// NFA2Dot generates a graphviz dot file from a NFA.
-func NFA2Dot(nfa *NFA) string {
+// ToDot generates a graphviz dot file from a NFA.
+func ToDot(nfa *NFA) string {
 	res := make([]string, 0, len(nfa.Edges)+5)
 
 	res = append(res, "\trankdir = LR;")
@@ -336,10 +336,10 @@ func NFA2Dot(nfa *NFA) string {
 	return "digraph g {\n" + strings.Join(res, "\n") + "\n}\n"
 }
 
-// Nfa2SVG uses graphvis' `dot` command to generate an SVG from `nfa`, returning
+// ToSVG uses graphvis' `dot` command to generate an SVG from `nfa`, returning
 // `nil` or `error`.
-func Nfa2SVG(nfa *NFA, output io.Writer) error {
-	dot := NFA2Dot(nfa)
+func ToSVG(nfa *NFA, output io.Writer) error {
+	dot := ToDot(nfa)
 	dotProc := exec.Command("dot", "-Tsvg")
 	dotProc.Stdin = strings.NewReader(dot)
 	dotProc.Stdout = output

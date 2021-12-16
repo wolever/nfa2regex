@@ -64,11 +64,11 @@ func main() {
 	}
 	fmt.Println("Saving converstion steps to:", tempDir)
 
-	regex := n.NFA2RegexWithConfig(nfa, n.NFA2RegexConfig{
+	regex := n.ToRegexWithConfig(nfa, n.ToRegexConfig{
 		StepCallback: n.StepCallbackWriteSVGs(tempDir),
 	})
 	fmt.Println("Graph:")
-	fmt.Println("https://dreampuf.github.io/GraphvizOnline/#" + url.PathEscape(n.NFA2Dot(nfa)))
+	fmt.Println("https://dreampuf.github.io/GraphvizOnline/#" + url.PathEscape(n.ToDot(nfa)))
 	fmt.Println()
 	fmt.Println("Regex:")
 	fmt.Println(regex)
